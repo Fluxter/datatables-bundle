@@ -14,6 +14,8 @@ namespace Omines\DataTablesBundle\Column;
 
 use Symfony\Component\OptionsResolver\OptionsResolver;
 
+use function is_string;
+
 /**
  * TextColumn.
  *
@@ -25,7 +27,49 @@ class TextColumn extends AbstractColumn
     {
         $value = (string) $value;
 
-        return $this->isRaw() ? $value : htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE);
+        $normalizedValue = $this->isRaw() ? $value : htmlspecialchars($value, \ENT_QUOTES | \ENT_SUBSTITUTE);
+
+        // if (!$this->options['case_sensitive']) {
+        //     $normalizedValue = 'LOWER('.$normalizedValue.')';
+        // }
+
+        return $normalizedValue;
+    }
+
+    public function getLeftExpr(): mixed
+    {
+        $expr = parent::getLeftExpr();
+
+        if (!$this->options['case_sensitive']) {
+            $expr = 'LOWER('.$expr.')';
+        }
+
+        return $expr;
+    }
+
+    public function getSearchValue(string|int $value): string|int
+    {
+        if (!is_string($value)) {
+            return $value;
+        }
+
+        return '%'.$value.'%';
+    }
+
+    public function getRightExpr(string $paramName): string
+    {
+        $expr = parent::getRightExpr($paramName);
+
+        if (!$this->options['case_sensitive']) {
+            $expr = 'LOWER('.$expr.')';
+        }
+
+        return $expr;
+    }
+
+    public function isRaw(): bool
+    {
+        return $this->options['raw'];
     }
 
     protected function configureOptions(OptionsResolver $resolver): static
@@ -34,12 +78,7 @@ class TextColumn extends AbstractColumn
 
         $resolver
             ->setDefault('operator', 'LIKE')
-            ->setDefault(
-                'rightExpr',
-                function ($value) {
-                    return '%' . $value . '%';
-                }
-            );
+            ->setDefault('case_sensitive', false);
 
         $resolver
             ->setDefault('raw', false)
@@ -47,10 +86,5 @@ class TextColumn extends AbstractColumn
         ;
 
         return $this;
-    }
-
-    public function isRaw(): bool
-    {
-        return $this->options['raw'];
     }
 }

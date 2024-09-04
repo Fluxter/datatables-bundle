@@ -17,6 +17,11 @@ use Omines\DataTablesBundle\DataTableState;
 use Omines\DataTablesBundle\Filter\AbstractFilter;
 use Symfony\Component\OptionsResolver\OptionsResolver;
 
+use function call_user_func;
+use function is_callable;
+use function is_string;
+use function sprintf;
+
 /**
  * AbstractColumn.
  *
@@ -24,15 +29,14 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
  */
 abstract class AbstractColumn
 {
+    /** @var array<string, mixed> */
+    protected array $options;
     /** @var array<string, OptionsResolver> */
     private static array $resolversByClass = [];
 
     private string $name;
     private int $index;
     private DataTable $dataTable;
-
-    /** @var array<string, mixed> */
-    protected array $options;
 
     /**
      * @param array<string, mixed> $options
@@ -43,7 +47,7 @@ abstract class AbstractColumn
         $this->index = $index;
         $this->dataTable = $dataTable;
 
-        $class = get_class($this);
+        $class = static::class;
         if (!isset(self::$resolversByClass[$class])) {
             self::$resolversByClass[$class] = new OptionsResolver();
             $this->configureOptions(self::$resolversByClass[$class]);
@@ -54,7 +58,7 @@ abstract class AbstractColumn
     /**
      * The transform function is responsible for converting column-appropriate input to a datatables-usable type.
      *
-     * @param mixed $value The single value of the column, if mapping makes it possible to derive one
+     * @param mixed $value   The single value of the column, if mapping makes it possible to derive one
      * @param mixed $context All relevant data of the entire row
      */
     public function transform(mixed $value = null, mixed $context = null): mixed
@@ -69,64 +73,7 @@ abstract class AbstractColumn
         return $this->render($this->normalize($value), $context);
     }
 
-    /**
-     * Apply final modifications before rendering to result.
-     *
-     * @param mixed $value The raw data pending rendering
-     * @param mixed $context All relevant data of the entire row
-     */
-    protected function render(mixed $value, mixed $context): mixed
-    {
-        if (is_string($render = $this->options['render'])) {
-            return sprintf($render, $value);
-        } elseif (is_callable($render)) {
-            return call_user_func($render, $value, $context, $this);
-        }
-
-        return $value;
-    }
-
     abstract public function normalize(mixed $value): mixed;
-
-    protected function configureOptions(OptionsResolver $resolver): static
-    {
-        $resolver
-            ->setDefaults([
-                'label' => null,
-                'data' => null,
-                'field' => null,
-                'propertyPath' => null,
-                'visible' => true,
-                'orderable' => null,
-                'orderField' => null,
-                'searchable' => null,
-                'globalSearchable' => null,
-                'filter' => null,
-                'className' => null,
-                'render' => null,
-                'leftExpr' => null,
-                'operator' => '=',
-                'rightExpr' => null,
-            ])
-            ->setAllowedTypes('label', ['null', 'string'])
-            ->setAllowedTypes('data', ['null', 'string', 'callable'])
-            ->setAllowedTypes('field', ['null', 'string'])
-            ->setAllowedTypes('propertyPath', ['null', 'string'])
-            ->setAllowedTypes('visible', 'boolean')
-            ->setAllowedTypes('orderable', ['null', 'boolean'])
-            ->setAllowedTypes('orderField', ['null', 'string'])
-            ->setAllowedTypes('searchable', ['null', 'boolean'])
-            ->setAllowedTypes('globalSearchable', ['null', 'boolean'])
-            ->setAllowedTypes('filter', ['null', AbstractFilter::class])
-            ->setAllowedTypes('className', ['null', 'string'])
-            ->setAllowedTypes('render', ['null', 'string', 'callable'])
-            ->setAllowedTypes('operator', ['string'])
-            ->setAllowedTypes('leftExpr', ['null', 'string', 'callable'])
-            ->setAllowedTypes('rightExpr', ['null', 'string', 'callable'])
-        ;
-
-        return $this;
-    }
 
     public function getIndex(): int
     {
@@ -201,17 +148,14 @@ abstract class AbstractColumn
         return $leftExpr;
     }
 
-    public function getRightExpr(mixed $value): mixed
+    public function getSearchValue(string|int $value): string|int
     {
-        $rightExpr = $this->options['rightExpr'];
-        if (null === $rightExpr) {
-            return $value;
-        }
-        if (is_callable($rightExpr)) {
-            return call_user_func($rightExpr, $value);
-        }
+        return $value;
+    }
 
-        return $rightExpr;
+    public function getRightExpr(string $paramName): string
+    {
+        return ':'.$paramName;
     }
 
     public function getOperator(): string
@@ -244,5 +188,62 @@ abstract class AbstractColumn
     public function isValidForSearch(mixed $value): bool
     {
         return true;
+    }
+
+    /**
+     * Apply final modifications before rendering to result.
+     *
+     * @param mixed $value   The raw data pending rendering
+     * @param mixed $context All relevant data of the entire row
+     */
+    protected function render(mixed $value, mixed $context): mixed
+    {
+        if (is_string($render = $this->options['render'])) {
+            return sprintf($render, $value);
+        } elseif (is_callable($render)) {
+            return call_user_func($render, $value, $context, $this);
+        }
+
+        return $value;
+    }
+
+    protected function configureOptions(OptionsResolver $resolver): static
+    {
+        $resolver
+            ->setDefaults([
+                'label' => null,
+                'data' => null,
+                'field' => null,
+                'propertyPath' => null,
+                'visible' => true,
+                'orderable' => null,
+                'orderField' => null,
+                'searchable' => null,
+                'globalSearchable' => null,
+                'filter' => null,
+                'className' => null,
+                'render' => null,
+                'leftExpr' => null,
+                'operator' => '=',
+                'rightExpr' => null,
+            ])
+            ->setAllowedTypes('label', ['null', 'string'])
+            ->setAllowedTypes('data', ['null', 'string', 'callable'])
+            ->setAllowedTypes('field', ['null', 'string'])
+            ->setAllowedTypes('propertyPath', ['null', 'string'])
+            ->setAllowedTypes('visible', 'boolean')
+            ->setAllowedTypes('orderable', ['null', 'boolean'])
+            ->setAllowedTypes('orderField', ['null', 'string'])
+            ->setAllowedTypes('searchable', ['null', 'boolean'])
+            ->setAllowedTypes('globalSearchable', ['null', 'boolean'])
+            ->setAllowedTypes('filter', ['null', AbstractFilter::class])
+            ->setAllowedTypes('className', ['null', 'string'])
+            ->setAllowedTypes('render', ['null', 'string', 'callable'])
+            ->setAllowedTypes('operator', ['string'])
+            ->setAllowedTypes('leftExpr', ['null', 'string', 'callable'])
+            ->setAllowedTypes('rightExpr', ['null', 'string', 'callable'])
+        ;
+
+        return $this;
     }
 }
