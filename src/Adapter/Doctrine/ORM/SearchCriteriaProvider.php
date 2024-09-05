@@ -24,6 +24,8 @@ use Omines\DataTablesBundle\DataTableState;
  */
 class SearchCriteriaProvider implements QueryBuilderProcessorInterface
 {
+    private static $paramIndex = 0;
+
     public function process(QueryBuilder $queryBuilder, DataTableState $state): void
     {
         $this->processSearchColumns($queryBuilder, $state);
@@ -44,13 +46,23 @@ class SearchCriteriaProvider implements QueryBuilderProcessorInterface
                     }
                 }
                 $expr = $queryBuilder->expr();
+
+                $paramName = $this->getParamName();
                 $queryBuilder->andWhere(new Comparison(
-                    $column->getLeftExpr(), 
+                    $column->getLeftExpr(),
                     $column->getOperator(),
-                    $expr->literal($column->getRightExpr($search))
-                ));
+                    $column->getRightExpr($paramName)
+                ))
+                ->setParameter($paramName, $column->getSearchValue($search));
             }
         }
+    }
+
+    private function getParamName(): string
+    {
+        ++static::$paramIndex;
+
+        return 'dtSearchParam_'.static::$paramIndex;
     }
 
     private function processGlobalSearch(QueryBuilder $queryBuilder, DataTableState $state): void
@@ -60,11 +72,13 @@ class SearchCriteriaProvider implements QueryBuilderProcessorInterface
             $comparisons = $expr->orX();
             foreach ($state->getDataTable()->getColumns() as $column) {
                 if ($column->isGlobalSearchable() && !empty($column->getField()) && $column->isValidForSearch($globalSearch)) {
+                    $paramName = $this->getParamName();
                     $comparisons->add(new Comparison(
-                        $column->getLeftExpr(), 
+                        $column->getLeftExpr(),
                         $column->getOperator(),
-                        $expr->literal($column->getRightExpr($globalSearch))
+                        $column->getRightExpr($paramName)
                     ));
+                    $queryBuilder->setParameter($paramName, $column->getSearchValue($globalSearch));
                 }
             }
             $queryBuilder->andWhere($comparisons);
